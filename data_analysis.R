@@ -1,5 +1,5 @@
 required_packages <- c(
-  "dplyr","readr","stats","knitr","tidyr"
+  "dplyr","readr","stats","knitr","tidyr","caret","randomForest","MLmetrics"
 )
 
 install_and_load <- function(packages) {
@@ -134,3 +134,5 @@ new_unique_data = unique(subset_col_data)
 print(dim(new_unique_data))
 
 write.csv(new_unique_data, "Cleaned_SpotifyTrack.csv")
+
+
