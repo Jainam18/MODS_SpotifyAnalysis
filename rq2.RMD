@@ -1,0 +1,447 @@
+``` {R}
+required_packages <- c(
+  "dplyr","readr","stats","knitr","tidyr","tidyverse","rpart","rpart.plot","caret","randomForest","MLmetrics","xgboost","ggplot2","corrplot","ModelMetrics","purrr"
+)
+
+install_and_load <- function(packages) {
+    for (pkg in packages) {
+      if (!requireNamespace(pkg, quietly = TRUE)) {
+        install.packages(pkg)
+      }
+      library(pkg, character.only = TRUE)
+    }
+  }
+
+install_and_load(required_packages)
+
+```
+
+
+```{R}
+data <- read.csv("Cleaned_SpotifyTrack.csv")
+
+features <- c("danceability", "energy", "loudness", "speechiness", "acousticness", "instrumentalness", "liveness", "valence", "tempo","track_genre")
+
+data <- data[features]
+# View(data)
+glimpse(data,width = 60)
+
+```
+<!-- The audio features have been selected  -->
+```{R}
+data <- data <- data %>% distinct(across(-track_genre), .keep_all = TRUE)
+
+genre_to_category <- c(
+  # EDM
+  "edm" = "Electronic Dance Music", 
+  "house" = "Electronic Dance Music", 
+  "electro" = "Electronic Dance Music", 
+  "trance" = "Electronic Dance Music", 
+  "techno" = "Electronic Dance Music", 
+  "dubstep" = "Electronic Dance Music", 
+  "drum-and-bass" = "Electronic Dance Music", 
+  "deep-house" = "Electronic Dance Music", 
+  "detroit-techno" = "Electronic Dance Music", 
+  "minimal-techno" = "Electronic Dance Music", 
+  "progressive-house" = "Electronic Dance Music", 
+  "breakbeat" = "Electronic Dance Music",
+  
+  # Rock
+  "alt-rock" = "Rock", 
+  "rock" = "Rock", 
+  "indie" = "Rock", 
+  "indie-pop" = "Rock", 
+  "punk" = "Rock", 
+  "punk-rock" = "Rock", 
+  "hard-rock" = "Rock", 
+  "metal" = "Rock", 
+  "heavy-metal" = "Rock", 
+  "black-metal" = "Rock", 
+  "death-metal" = "Rock", 
+  "grunge" = "Rock",
+  
+  # Hip-Hop and R&B
+  "hip-hop" = "Hip-Hop and R&B", 
+  "r-n-b" = "Hip-Hop and R&B", 
+  "trap" = "Hip-Hop and R&B",
+  
+  # Pop
+  "pop" = "Pop", 
+  "electro-pop" = "Pop", 
+  "synth-pop" = "Pop", 
+  "k-pop" = "Pop", 
+  "pop-film" = "Pop", 
+  "power-pop" = "Pop",
+  
+  # Latin & Reggae/Dancehall
+  "latin" = "Latin & Reggae/Dancehall", 
+  "reggaeton" = "Latin & Reggae/Dancehall", 
+  "salsa" = "Latin & Reggae/Dancehall", 
+  "samba" = "Latin & Reggae/Dancehall", 
+  "reggae" = "Latin & Reggae/Dancehall", 
+  "dancehall" = "Latin & Reggae/Dancehall",
+  
+  # Funk and Disco
+  "funk" = "Funk and Disco", 
+  "disco" = "Funk and Disco", 
+  "groove" = "Funk and Disco",
+  
+  # Indian
+  "indian" = "Indian"
+)
+
+# Apply mapping to dataframe
+data$music_category <- ifelse(data$track_genre %in% names(genre_to_category), 
+                            genre_to_category[data$track_genre], 
+                            "Other")
+data %>% 
+  count(music_category) %>%
+  knitr::kable()
+```
+Musical genres have been grouper into broader musical categories but the data is really unbalanced across the categories
+
+``` {R}
+View(data)
+
+data = data%>%select(-track_genre)
+```
+
+``` {R}
+features <- c("danceability", "energy", "loudness", "speechiness", "acousticness", "instrumentalness", "liveness", "valence", "tempo")
+
+p <- data %>%
+  select(c('music_category', features)) %>%
+  pivot_longer(cols = features) %>%
+  ggplot(aes(x = value)) +
+  geom_density(aes(color = music_category), alpha = 0.5) +
+  facet_wrap(~name, ncol = 3, scales = 'free') +
+  labs(title = 'Spotify Audio Feature Density - by Genre',
+       x = '', y = 'density') +
+  theme(axis.text.y = element_blank())
+
+ggsave(filename = "spotify_audio_feature_density.png", plot = p, width = 12, height = 8, dpi = 300)
+```
+
+``` {R}
+data <- data <- data %>% distinct(across(-music_category), .keep_all = TRUE)
+```
+
+``` {R}
+
+c <- data %>%
+  select(features) %>%
+  scale() %>%
+  cor() %>%
+  corrplot::corrplot(method = 'color', 
+                     order = 'hclust', 
+                     type = 'upper', 
+                     diag = FALSE, 
+                     tl.col = 'black',
+                     addCoef.col = "grey30",
+                     number.cex = 0.6,
+                     main = 'Audio Feature Correlation',
+                     mar = c(2,2,2,2),
+                     family = 'Avenir')
+
+ggsave(filename = "spotify_audio_feature_correlation.png", plot = c, width = 12, height = 8, dpi = 300)
+
+```
+
+``` {R}
+data_standardized <- data %>%
+  mutate(across(all_of(features), scale))
+
+View(data_standardized)
+```
+
+``` {R}
+set.seed(1234)
+training_songs <- sample(1:nrow(data_standardized), nrow(data_standardized)*.80, replace = FALSE)
+train_set <- data_standardized[training_songs, c('music_category', features)] 
+test_set <- data_standardized[-training_songs, c('music_category', features)] 
+
+train_resp <- data_standardized[training_songs, 'music_category']
+test_resp <- data_standardized[-training_songs, 'music_category']
+```
+
+
+``` {R}
+set.seed(123)
+model_rf <- randomForest(as_factor(music_category) ~ ., data = train_set, ntree = 100)
+
+predict_rf <- predict(model_rf, test_set)
+
+compare_rf <- data.frame(true_value = test_resp,
+                         predicted_value = predict_rf,
+                         model = 'random_forest',
+                         stringsAsFactors = FALSE) 
+
+model_accuracy_calc <- function(df, model_name) {
+  df %>% 
+    mutate(match = ifelse(true_value == predicted_value, TRUE, FALSE)) %>% 
+    count(match) %>% 
+    mutate(accuracy = n/sum(n),
+           model = model_name)
+}
+accuracy_rf <- model_accuracy_calc(df = compare_rf, model_name = 'random_forest')
+
+```
+
+``` {R}
+print(accuracy_rf)
+```
+
+
+``` {R}
+calculate_f1_scores <- function(actual, predicted) {
+  labels <- unique(actual)
+  macro_f1 <- mean(sapply(labels, function(class) {
+    F1_Score(y_true = actual == class, y_pred = predicted == class, positive = TRUE)
+  }), na.rm = TRUE)
+
+  support <- table(actual)
+  weighted_f1 <- sum(sapply(labels, function(class) {
+    F1_Score(y_true = actual == class, y_pred = predicted == class, positive = TRUE) * support[class] / sum(support)
+  }), na.rm = TRUE)
+
+  return(list(macro_f1 = macro_f1, weighted_f1 = weighted_f1))
+}
+
+f1_scores_rf <- calculate_f1_scores(actual = compare_rf$true_value, predicted = compare_rf$predicted_value)
+
+# Print the results
+print(f1_scores_rf)
+```
+
+Okay so till now I have implemented a random forest classifier having an weighted f1 score of 0.668
+
+now lets try the multilabel classification here
+
+``` {R}
+data_2 = read.csv("Cleaned_SpotifyTrack.csv")
+
+```
+
+``` {R}
+genre_to_category <- c(
+  # EDM
+  "edm" = "Electronic Dance Music", 
+  "house" = "Electronic Dance Music", 
+  "electro" = "Electronic Dance Music", 
+  "trance" = "Electronic Dance Music", 
+  "techno" = "Electronic Dance Music", 
+  "dubstep" = "Electronic Dance Music", 
+  "drum-and-bass" = "Electronic Dance Music", 
+  "deep-house" = "Electronic Dance Music", 
+  "detroit-techno" = "Electronic Dance Music", 
+  "minimal-techno" = "Electronic Dance Music", 
+  "progressive-house" = "Electronic Dance Music", 
+  "breakbeat" = "Electronic Dance Music",
+  
+  # Rock
+  "alt-rock" = "Rock", 
+  "rock" = "Rock", 
+  "indie" = "Rock", 
+  "indie-pop" = "Rock", 
+  "punk" = "Rock", 
+  "punk-rock" = "Rock", 
+  "hard-rock" = "Rock", 
+  "metal" = "Rock", 
+  "heavy-metal" = "Rock", 
+  "black-metal" = "Rock", 
+  "death-metal" = "Rock", 
+  "grunge" = "Rock",
+  
+  # Hip-Hop and R&B
+  "hip-hop" = "Hip-Hop and R&B", 
+  "r-n-b" = "Hip-Hop and R&B", 
+  "trap" = "Hip-Hop and R&B",
+  
+  # Pop
+  "pop" = "Pop", 
+  "electro-pop" = "Pop", 
+  "synth-pop" = "Pop", 
+  "k-pop" = "Pop", 
+  "pop-film" = "Pop", 
+  "power-pop" = "Pop",
+  
+  # Latin & Reggae/Dancehall
+  "latin" = "Latin & Reggae/Dancehall", 
+  "reggaeton" = "Latin & Reggae/Dancehall", 
+  "salsa" = "Latin & Reggae/Dancehall", 
+  "samba" = "Latin & Reggae/Dancehall", 
+  "reggae" = "Latin & Reggae/Dancehall", 
+  "dancehall" = "Latin & Reggae/Dancehall",
+  
+  # Funk and Disco
+  "funk" = "Funk and Disco", 
+  "disco" = "Funk and Disco", 
+  "groove" = "Funk and Disco",
+  
+  # Indian
+  "indian" = "Indian"
+)
+
+```
+
+``` {R}
+data_2$music_category <- ifelse(data_2$track_genre %in% names(genre_to_category), 
+                            genre_to_category[data_2$track_genre], 
+                            "Other")
+
+glimpse(data_2,width=60)
+
+```
+
+``` {R}
+multilabel_data <- data_2 %>%
+  group_by(track_id) %>%
+  summarize(
+    genres = list(unique(music_category)),  
+    across(all_of(features), mean)       
+  )
+```
+
+``` {R}
+View(multilabel_data)
+```
+
+``` {R}
+multilabel_data = multilabel_data%>%select(-c('track_genre'))
+```
+
+``` {R}
+str(multilabel_data)
+```
+
+``` {R}
+multilabel_data_flat <- multilabel_data %>%
+  unnest_longer(genres)
+
+# Step 2: create a column "present" with value 1
+multilabel_data_flat <- multilabel_data_flat %>%
+  mutate(present = 1)
+
+# Step 3: pivot_wider to wide format
+multilabel_matrix <- multilabel_data_flat %>%
+  pivot_wider(
+    names_from = genres,
+    values_from = present,
+    values_fill = 0
+  )
+```
+
+``` {R}
+View(multilabel_matrix)
+```
+
+``` {R}
+multilabel_matrix = multilabel_matrix%>%select(-c('track_id'))
+```
+
+``` {R}
+features <- c("danceability", "energy", "loudness", "speechiness", "acousticness", "instrumentalness", "liveness", "valence", "tempo")
+
+genre_cols <- setdiff(names(multilabel_matrix), c(features))
+
+models <- map(genre_cols, function(genre) {
+  randomForest(
+    x = multilabel_matrix %>% select(all_of(features)),
+    y = as.factor(multilabel_matrix[[genre]]),
+    ntree = 100
+  )
+})
+
+names(models) <- genre_cols
+```
+
+
+``` {R}
+set.seed(123)
+
+# Create an 80-20 train-test split
+train_indices <- sample(1:nrow(multilabel_matrix), size = 0.8 * nrow(multilabel_matrix))
+
+train_set <- multilabel_matrix[train_indices, ]
+test_set <- multilabel_matrix[-train_indices, ]
+
+```
+
+``` {R}
+models <- map(genre_cols, function(genre) {
+  randomForest(
+    x = train_set %>% select(all_of(features)),
+    y = as.factor(train_set[[genre]]),
+    ntree = 100
+  )
+})
+names(models) <- genre_cols
+
+```
+
+``` {R}
+# Predict probabilities or classes
+predictions <- map(models, function(model) {
+  predict(model, newdata = test_set %>% select(all_of(features)), type = "response")
+})
+
+```
+
+``` {R}
+predicted_matrix <- as.data.frame(predictions)
+
+```
+
+``` {R}
+calculate_f1_scores <- function(actual, predicted) {
+  labels <- names(actual)
+  
+  macro_f1 <- mean(sapply(labels, function(class) {
+    F1_Score(y_true = actual[[class]], y_pred = predicted[[class]], positive = "1")
+  }), na.rm = TRUE)
+  
+  support <- colSums(actual)
+  weighted_f1 <- sum(sapply(labels, function(class) {
+    F1_Score(y_true = actual[[class]], y_pred = predicted[[class]], positive = "1") * support[[class]] / sum(support)
+  }), na.rm = TRUE)
+  
+  return(list(macro_f1 = macro_f1, weighted_f1 = weighted_f1))
+}
+
+# Now calculate
+test_actual <- test_set %>% select(all_of(genre_cols))
+test_predicted <- predicted_matrix %>% select(all_of(genre_cols))
+
+f1_scores <- calculate_f1_scores(test_actual, test_predicted)
+
+print(f1_scores)
+
+```
+
+``` {R}
+names(predicted_matrix)
+
+```
+
+``` {R}
+names(test_set)
+
+
+```
+
+``` {R}
+names(test_set) <- make.names(names(test_set))
+
+# Now redefine genre columns safely
+genre_cols_cleaned <- names(predicted_matrix)
+
+# Now you can select actuals and predictions cleanly
+test_actual <- test_set %>% select(all_of(genre_cols_cleaned))
+test_predicted <- predicted_matrix %>% select(all_of(genre_cols_cleaned))
+
+# Now calculate F1 scores
+f1_scores <- calculate_f1_scores(test_actual, test_predicted)
+
+# Print F1 scores
+print(f1_scores)
+```

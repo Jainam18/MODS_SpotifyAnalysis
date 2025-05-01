@@ -119,7 +119,7 @@ remove_outliers <- function(data, column_name) {
 }
 
 # Remove outliers from 'duration_ms'
-new_data <- remove_outliers(new_data, "duration_ms")
+new_data <- remove_outliers(data, "duration_ms")
 
 # Remove outliers from 'tempo'
 new_data <- remove_outliers(new_data, "tempo")
@@ -134,5 +134,3 @@ new_unique_data = unique(subset_col_data)
 print(dim(new_unique_data))
 
 write.csv(new_unique_data, "Cleaned_SpotifyTrack.csv")
-
-

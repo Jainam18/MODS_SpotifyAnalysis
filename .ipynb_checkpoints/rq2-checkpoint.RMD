@@ -1,0 +1,9 @@
+
+```{R}
+data <- read.csv("Cleaned_SpotifyTrack.csv")
+
+features <- c("danceability", "energy", "loudness", "speechiness", "acousticness", "instrumentalness", "liveness", "valence", "tempo","track_genre")
+
+data <- data[features]
+View(data)
+```
