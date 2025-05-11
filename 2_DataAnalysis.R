@@ -1,5 +1,5 @@
 required_packages <- c(
-  "dplyr","readr","stats","knitr","tidyr","caret","randomForest","MLmetrics"
+  "dplyr","readr","stats","knitr","tidyr","caret","randomForest","MLmetrics","ggplot2","reshape2"
 )
 
 install_and_load <- function(packages) {
@@ -13,7 +13,7 @@ install_and_load <- function(packages) {
 
 install_and_load(required_packages)
 
-spotify_data <- read.csv("/Users/jashbhatia/Downloads/MODS_SpotifyAnalysis/dataset.csv")
+spotify_data <- read.csv("Cleaned_SpotifyTrack.csv")
 
 # Script: Highest Overall Popularity Across Different Genres
 
@@ -25,6 +25,18 @@ artist_popularity <- spotify_data %>%
   arrange(desc(mean_popularity))
 
 top_artist <- artist_popularity[1, ]
+
+top_artists_plot <- artist_popularity %>%
+  top_n(10, mean_popularity) %>%
+  ggplot(aes(x = reorder(artists, mean_popularity), y = mean_popularity)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Top 10 Artists by Average Popularity", x = "Artist", y = "Average Popularity")
+
+print(top_artists_plot)
+
+ggsave("Plots/EDA/top_10_artists_popularity.png", plot = top_artists_plot, width = 8, height = 6, dpi = 300)
+
 
 cat("=====================================\n")
 cat("HIGHEST OVERALL POPULARITY ACROSS GENRES\n")
@@ -43,6 +55,18 @@ genre_popularity <- spotify_data %>%
   arrange(desc(mean_popularity))
 
 top_genre <- genre_popularity[1, ]
+
+top_genres_plot <- genre_popularity %>%
+  top_n(10, mean_popularity) %>%
+  ggplot(aes(x = reorder(track_genre, mean_popularity), y = mean_popularity)) +
+  geom_col(fill = "darkgreen") +
+  coord_flip() +
+  labs(title = "Top 10 Genres by Average Popularity", x = "Genre", y = "Average Popularity")
+
+print(top_genres_plot)
+
+ggsave("Plots/EDA/top_10_genres_popularity.png", plot = top_genres_plot, width = 8, height = 6, dpi = 300)
+
 
 cat("=====================================\n")
 cat("MOST POPULAR GENRE UNIVERSALLY\n")
@@ -90,12 +114,27 @@ cat("=====================================================\n\n")
 ################################################################
 
 # Simple boxplot comparing distributions
-boxplot(popularity ~ explicit,
-        data = spotify_data,
-        main = "Song Popularity by Explicit Content",
-        xlab = "Explicit",
-        ylab = "Popularity")
+pop_summary <- spotify_data %>%
+  group_by(explicit) %>%
+  summarize(
+    avg_popularity = mean(popularity, na.rm = TRUE),
+    se = sd(popularity, na.rm = TRUE) / sqrt(n()),  # Standard Error
+    count = n()
+  )
+  
+ggplot(pop_summary, aes(x = as.factor(explicit), y = avg_popularity, fill = as.factor(explicit))) +
+  geom_bar(stat = "identity", width = 0.5, alpha = 0.7) +
+  geom_errorbar(aes(ymin = avg_popularity - se, ymax = avg_popularity + se), width = 0.2) +
+  scale_fill_manual(values = c("grey60", "tomato")) +
+  labs(
+    title = "Average Popularity by Explicit Content",
+    x = "Explicit Content (0 = No, 1 = Yes)",
+    y = "Average Popularity",
+    fill = "Explicit"
+  ) +
+  theme_minimal(base_size = 14)
 
+ggsave("Plots/EDA/explicit_vs_popularity.png", width = 8, height = 6, dpi = 300)
 
 # Script: Exploring Valence vs. Other Audio Features
 
@@ -116,8 +155,13 @@ cat("========================================================\n")
 print(cor_matrix)
 cat("========================================================\n\n")
 
-# Step 5: Pairwise scatter plot
-# This will open a multi-plot window of scatter plots for each feature pair.
-# Be aware that if you have many features, it can be quite large.
-pairs(audio_data,
-      main = "Pairwise Scatter Plots: Valence vs Other Audio Features")
+melted_cor <- melt(cor_matrix)
+
+cor_heatmap <- ggplot(melted_cor, aes(Var1, Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+  labs(title = "Correlation Heatmap", x = "", y = "") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave("Plots/EDA/valence_audio_correlation_heatmap.png", plot = cor_heatmap, width = 8, height = 6, dpi = 300)
+

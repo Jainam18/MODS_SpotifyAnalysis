@@ -17,7 +17,7 @@ install_and_load(required_packages)
 
 # 2. Load Data
 
-data <- read.csv(file.choose())  # Choose your CSV file
+data <- read.csv('Cleaned_SpotifyTrack.csv')  # Choose your CSV file
 numeric_columns <- names(data)[sapply(data, is.numeric)]
 
 

@@ -75,7 +75,7 @@ detect_and_handle_outliers <- function(data, columns) {
     lower_bound <- Q1 - 1.5 * IQR
     upper_bound <- Q3 + 1.5 * IQR
     # Create boxplot
-    png(paste0("Plots/boxplot_", col, ".png"))
+    png(paste0("Plots/Box_Plots/boxplot_", col, ".png"))
     boxplot(numeric_column, main = paste("Boxplot for", col), ylab = "Value")
     dev.off()
     # Identify and replace outliers

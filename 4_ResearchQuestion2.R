@@ -1,4 +1,4 @@
-``` {R}
+# Installing Libraries 
 required_packages <- c(
   "dplyr","readr","stats","knitr","tidyr","tidyverse","rpart","rpart.plot","caret","randomForest","MLmetrics","xgboost","ggplot2","corrplot","ModelMetrics","purrr"
 )
@@ -14,21 +14,87 @@ install_and_load <- function(packages) {
 
 install_and_load(required_packages)
 
-```
+# Genre Classification 
 
+# Initial Approach using all the 113 genres and checking the accuracy and f1 score 
+print("-------------------------------------------------------------------------------")
 
-```{R}
+print("Mutliclass Classification - ")
+
+print("-------------------------------------")
+
+print("Using all the 113 genres:")
+
 data <- read.csv("Cleaned_SpotifyTrack.csv")
 
 features <- c("danceability", "energy", "loudness", "speechiness", "acousticness", "instrumentalness", "liveness", "valence", "tempo","track_genre")
 
 data <- data[features]
 # View(data)
-glimpse(data,width = 60)
+# print(dim(data))
+# Remove duplicate tracks, keeping only the first genre
+data <- data <- data %>% distinct(across(-track_genre), .keep_all = TRUE)
+# # print(dim(data))
+# View(data)
 
-```
-<!-- The audio features have been selected  -->
-```{R}
+data$track_genre <- as.factor(data$track_genre)
+
+set.seed(123)
+trainIndex <- createDataPartition(data$track_genre, p = 0.8, list = FALSE)
+trainData <- data[trainIndex, ]
+testData <- data[-trainIndex, ]
+
+# Train a Random Forest model
+set.seed(123)
+model1 <- randomForest(track_genre ~ ., data = trainData, ntree = 100)
+
+# Predict on test data
+predictions1 <- predict(model1, testData)
+
+# Evaluate model accuracy
+conf_matrix1 <- confusionMatrix(predictions1, testData$track_genre)
+# print(conf_matrix)
+
+calculate_f1_scores <- function(actual, predicted) {
+  labels <- unique(actual)  # Get unique class labels
+  macro_f1 <- mean(sapply(labels, function(class) {
+    F1_Score(y_true = actual == class, y_pred = predicted == class, positive = TRUE)
+  }), na.rm = TRUE)
+
+  # Compute weighted F1-score
+  support <- table(actual)  # Class frequencies
+  weighted_f1 <- sum(sapply(labels, function(class) {
+    F1_Score(y_true = actual == class, y_pred = predicted == class, positive = TRUE) * support[class] / sum(support)
+  }), na.rm = TRUE)
+
+  return(list(macro_f1 = macro_f1, weighted_f1 = weighted_f1))
+}
+
+f1_results_1 <- calculate_f1_scores(testData$track_genre, predictions1)
+
+print(paste("Macro F1-score:", f1_results_1$macro_f1))
+print(paste("Weighted F1-score:", f1_results_1$weighted_f1))
+
+
+# Second Approach creating broader musical categories by merging the musical genres 
+
+print("-------------------------------------")
+
+print("Using 8 broader musical categories:")
+
+print("---------------------------")
+print("Random Forest Algorithm --")
+
+# Random Forest Algorithm
+
+data <- read.csv("Cleaned_SpotifyTrack.csv")
+
+features <- c("danceability", "energy", "loudness", "speechiness", "acousticness", "instrumentalness", "liveness", "valence", "tempo","track_genre")
+
+data <- data[features]
+# View(data)
+# glimpse(data,width = 60)
+
 data <- data <- data %>% distinct(across(-track_genre), .keep_all = TRUE)
 
 genre_to_category <- c(
@@ -90,23 +156,12 @@ genre_to_category <- c(
   "indian" = "Indian"
 )
 
-# Apply mapping to dataframe
 data$music_category <- ifelse(data$track_genre %in% names(genre_to_category), 
                             genre_to_category[data$track_genre], 
                             "Other")
-data %>% 
-  count(music_category) %>%
-  knitr::kable()
-```
-Musical genres have been grouper into broader musical categories but the data is really unbalanced across the categories
-
-``` {R}
-View(data)
 
 data = data%>%select(-track_genre)
-```
 
-``` {R}
 features <- c("danceability", "energy", "loudness", "speechiness", "acousticness", "instrumentalness", "liveness", "valence", "tempo")
 
 p <- data %>%
@@ -119,14 +174,7 @@ p <- data %>%
        x = '', y = 'density') +
   theme(axis.text.y = element_blank())
 
-ggsave(filename = "spotify_audio_feature_density.png", plot = p, width = 12, height = 8, dpi = 300)
-```
-
-``` {R}
 data <- data <- data %>% distinct(across(-music_category), .keep_all = TRUE)
-```
-
-``` {R}
 
 c <- data %>%
   select(features) %>%
@@ -143,18 +191,13 @@ c <- data %>%
                      mar = c(2,2,2,2),
                      family = 'Avenir')
 
-ggsave(filename = "spotify_audio_feature_correlation.png", plot = c, width = 12, height = 8, dpi = 300)
+# ggsave(filename = "Plots/RQ2_Plots/spotify_audio_feature_correlation.png", plot = c, width = 12, height = 8, dpi = 300)
 
-```
-
-``` {R}
 data_standardized <- data %>%
   mutate(across(all_of(features), scale))
 
 View(data_standardized)
-```
 
-``` {R}
 set.seed(1234)
 training_songs <- sample(1:nrow(data_standardized), nrow(data_standardized)*.80, replace = FALSE)
 train_set <- data_standardized[training_songs, c('music_category', features)] 
@@ -162,10 +205,8 @@ test_set <- data_standardized[-training_songs, c('music_category', features)]
 
 train_resp <- data_standardized[training_songs, 'music_category']
 test_resp <- data_standardized[-training_songs, 'music_category']
-```
 
 
-``` {R}
 set.seed(123)
 model_rf <- randomForest(as_factor(music_category) ~ ., data = train_set, ntree = 100)
 
@@ -185,14 +226,8 @@ model_accuracy_calc <- function(df, model_name) {
 }
 accuracy_rf <- model_accuracy_calc(df = compare_rf, model_name = 'random_forest')
 
-```
+# print(accuracy_rf)
 
-``` {R}
-print(accuracy_rf)
-```
-
-
-``` {R}
 calculate_f1_scores <- function(actual, predicted) {
   labels <- unique(actual)
   macro_f1 <- mean(sapply(labels, function(class) {
@@ -211,18 +246,40 @@ f1_scores_rf <- calculate_f1_scores(actual = compare_rf$true_value, predicted = 
 
 # Print the results
 print(f1_scores_rf)
-```
 
-Okay so till now I have implemented a random forest classifier having an weighted f1 score of 0.668
+print("--------------------")
+print("XG Boost Algorithm")
+# XG Boost 
+matrix_train_gb <- xgb.DMatrix(data = as.matrix(train_set[,-1]), label = as.integer(as.factor(train_set[,1])))
+matrix_test_gb <- xgb.DMatrix(data = as.matrix(test_set[,-1]), label = as.integer(as.factor(test_set[,1])))
 
-now lets try the multilabel classification here
+model_gb <- xgboost(data = matrix_train_gb, 
+                    nrounds = 50,
+                    verbose = FALSE,
+                    params = list(objective = "multi:softmax",
+                                  num_class = 8 + 1))
 
-``` {R}
+predict_gb <- predict(model_gb, matrix_test_gb)
+predict_gb <- levels(as.factor(test_set$music_category))[predict_gb]
+
+compare_gb <- data.frame(true_value = test_resp,
+                         predicted_value = predict_gb,
+                         model = 'xgboost',
+                         stringsAsFactors = FALSE) 
+
+accuracy_gb <- model_accuracy_calc(df = compare_gb, model_name = 'xgboost')
+
+
+# print(accuracy_gb)  
+
+f1_scores_gb <- calculate_f1_scores(actual = compare_gb$true_value, predicted = compare_gb$predicted_value)
+print(f1_scores_gb)
+
+print("--------------------------------------------------------------------------------")
+# Multi-Label Classification
+print("Multi-Label Classification: ")
 data_2 = read.csv("Cleaned_SpotifyTrack.csv")
 
-```
-
-``` {R}
 genre_to_category <- c(
   # EDM
   "edm" = "Electronic Dance Music", 
@@ -281,40 +338,18 @@ genre_to_category <- c(
   # Indian
   "indian" = "Indian"
 )
-
-```
-
-``` {R}
 data_2$music_category <- ifelse(data_2$track_genre %in% names(genre_to_category), 
                             genre_to_category[data_2$track_genre], 
                             "Other")
-
-glimpse(data_2,width=60)
-
-```
-
-``` {R}
 multilabel_data <- data_2 %>%
   group_by(track_id) %>%
   summarize(
     genres = list(unique(music_category)),  
     across(all_of(features), mean)       
   )
-```
 
-``` {R}
-View(multilabel_data)
-```
+# multilabel_data = multilabel_data%>%select(-c('track_genre'))
 
-``` {R}
-multilabel_data = multilabel_data%>%select(-c('track_genre'))
-```
-
-``` {R}
-str(multilabel_data)
-```
-
-``` {R}
 multilabel_data_flat <- multilabel_data %>%
   unnest_longer(genres)
 
@@ -329,34 +364,25 @@ multilabel_matrix <- multilabel_data_flat %>%
     values_from = present,
     values_fill = 0
   )
-```
 
-``` {R}
-View(multilabel_matrix)
-```
 
-``` {R}
 multilabel_matrix = multilabel_matrix%>%select(-c('track_id'))
-```
 
-``` {R}
 features <- c("danceability", "energy", "loudness", "speechiness", "acousticness", "instrumentalness", "liveness", "valence", "tempo")
 
 genre_cols <- setdiff(names(multilabel_matrix), c(features))
 
-models <- map(genre_cols, function(genre) {
-  randomForest(
-    x = multilabel_matrix %>% select(all_of(features)),
-    y = as.factor(multilabel_matrix[[genre]]),
-    ntree = 100
-  )
-})
+# models <- map(genre_cols, function(genre) {
+#   randomForest(
+#     x = multilabel_matrix %>% select(all_of(features)),
+#     y = as.factor(multilabel_matrix[[genre]]),
+#     ntree = 100
+#   )
+# })
 
 names(models) <- genre_cols
-```
 
 
-``` {R}
 set.seed(123)
 
 # Create an 80-20 train-test split
@@ -365,9 +391,6 @@ train_indices <- sample(1:nrow(multilabel_matrix), size = 0.8 * nrow(multilabel_
 train_set <- multilabel_matrix[train_indices, ]
 test_set <- multilabel_matrix[-train_indices, ]
 
-```
-
-``` {R}
 models <- map(genre_cols, function(genre) {
   randomForest(
     x = train_set %>% select(all_of(features)),
@@ -376,23 +399,12 @@ models <- map(genre_cols, function(genre) {
   )
 })
 names(models) <- genre_cols
-
-```
-
-``` {R}
 # Predict probabilities or classes
 predictions <- map(models, function(model) {
   predict(model, newdata = test_set %>% select(all_of(features)), type = "response")
 })
 
-```
-
-``` {R}
 predicted_matrix <- as.data.frame(predictions)
-
-```
-
-``` {R}
 calculate_f1_scores <- function(actual, predicted) {
   labels <- names(actual)
   
@@ -408,28 +420,6 @@ calculate_f1_scores <- function(actual, predicted) {
   return(list(macro_f1 = macro_f1, weighted_f1 = weighted_f1))
 }
 
-# Now calculate
-test_actual <- test_set %>% select(all_of(genre_cols))
-test_predicted <- predicted_matrix %>% select(all_of(genre_cols))
-
-f1_scores <- calculate_f1_scores(test_actual, test_predicted)
-
-print(f1_scores)
-
-```
-
-``` {R}
-names(predicted_matrix)
-
-```
-
-``` {R}
-names(test_set)
-
-
-```
-
-``` {R}
 names(test_set) <- make.names(names(test_set))
 
 # Now redefine genre columns safely
@@ -444,4 +434,35 @@ f1_scores <- calculate_f1_scores(test_actual, test_predicted)
 
 # Print F1 scores
 print(f1_scores)
-```
+
+# Load required libraries
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+# Create a dataframe from your model F1 results
+f1_scores_df <- data.frame(
+  Model = c("RF (113 Genres)", "RF (8 Categories)", "XGBoost (8 Categories)", "Multilabel RF"),
+  Macro_F1 = c(f1_results_1$macro_f1, f1_scores_rf$macro_f1, f1_scores_gb$macro_f1, f1_scores$macro_f1),
+  Weighted_F1 = c(f1_results_1$weighted_f1, f1_scores_rf$weighted_f1, f1_scores_gb$weighted_f1, f1_scores$weighted_f1)
+)
+
+# Convert to long format for ggplot
+f1_scores_long <- pivot_longer(f1_scores_df, 
+                               cols = c("Macro_F1", "Weighted_F1"), 
+                               names_to = "Metric", 
+                               values_to = "Score")
+
+# Plot
+ggplot(f1_scores_long, aes(x = Model, y = Score, fill = Metric)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8), width = 0.6) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(title = "F1 Score Comparison Across Models",
+       y = "F1 Score", x = "Model") +
+  ylim(0, 1) +
+  theme_minimal(base_size = 14) +
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle = 15, hjust = 1))
+
+# Optional: Save the plot
+ggsave("f1_score_comparison_plot.png", width = 10, height = 6, dpi = 300)
