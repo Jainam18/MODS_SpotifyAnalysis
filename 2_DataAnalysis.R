@@ -20,8 +20,10 @@ spotify_data <- read.csv("Cleaned_SpotifyTrack.csv")
 artist_popularity <- spotify_data %>%
   group_by(artists) %>%
   summarize(
+    song_count = n(),
     mean_popularity = mean(popularity, na.rm = TRUE)
   ) %>%
+  filter(song_count > 100) %>%
   arrange(desc(mean_popularity))
 
 top_artist <- artist_popularity[1, ]
@@ -31,9 +33,11 @@ top_artists_plot <- artist_popularity %>%
   ggplot(aes(x = reorder(artists, mean_popularity), y = mean_popularity)) +
   geom_col(fill = "steelblue") +
   coord_flip() +
-  labs(title = "Top 10 Artists by Average Popularity", x = "Artist", y = "Average Popularity")
+  labs(title = "Top 10 Artists by Average Popularity (Min. 20 Songs)", 
+       x = "Artist", y = "Average Popularity")
 
 print(top_artists_plot)
+
 
 ggsave("Plots/EDA/top_10_artists_popularity.png", plot = top_artists_plot, width = 8, height = 6, dpi = 300)
 
@@ -135,6 +139,16 @@ ggplot(pop_summary, aes(x = as.factor(explicit), y = avg_popularity, fill = as.f
   theme_minimal(base_size = 14)
 
 ggsave("Plots/EDA/explicit_vs_popularity.png", width = 8, height = 6, dpi = 300)
+
+dependent_vars <- c("popularity", "energy", "loudness", "valence", "danceability")
+
+manova_data <- spotify_data %>%
+  select(explicit, all_of(dependent_vars)) %>%
+  drop_na()
+
+manova_model <- manova(cbind(popularity, energy, loudness, valence, danceability) ~ explicit, data = manova_data)
+print(summary(manova_model, test = "Pillai"))
+
 
 # Script: Exploring Valence vs. Other Audio Features
 
