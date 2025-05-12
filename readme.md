@@ -9,15 +9,25 @@ The goal is to classify songs into meaningful genres based on their audio featur
 ## 📂 Project Structure
 
 ├── 1_DataCleaning.R # Script for cleaning and preprocessing the raw dataset
+
 ├── 2_DataAnalysis.R # EDA and visualization (feature density, correlation)
+
 ├── 3_ResearchQuestion1.R # Analysis for: Does explicit content impact track popularity?
+
 ├── 4_ResearchQuestion2.R # Multiclass and multilabel genre classification using ML models
+
 ├── 5_ResearchQuestion3.R # Clustering songs using K-Means and visualizing clusters
+
 ├── Cleaned_SpotifyTrack.csv # Final cleaned dataset used for modeling
+
 ├── dataset.csv # Original/raw dataset before cleaning
+
 ├── Plots/ # Directory to save generated plots
+
 ├── readme.md # Project overview and structure (this file)
+
 └── .Rapp.history # RStudio history file (can be ignored)
+
 
 
 ---
